@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memcached-exporter
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memcached-exporter
+  template:
+    metadata:
+      labels:
+        app: memcached-exporter
+        monitoring: enabled
+    spec:
+      containers:
+        - name: exporter
+          image: prom/memcached-exporter:v0.15.3
+          args:
+            - --memcached.address=memcached:11211
+          ports:
+            - name: metrics
+              containerPort: 9150
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: memcached-exporter
+  namespace: observability
+  labels:
+    monitoring: enabled
+spec:
+  selector:
+    app: memcached-exporter
+  ports:
+    - name: metrics
+      port: 9150
+      targetPort: 9150

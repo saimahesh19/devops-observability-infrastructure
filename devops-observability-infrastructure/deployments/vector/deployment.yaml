@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vector
+  namespace: observability
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vector
+  template:
+    metadata:
+      labels:
+        app: vector
+        monitoring: enabled
+    spec:
+      containers:
+        - name: vector
+          image: timberio/vector:0.48.0-alpine
+          args: ["--config", "/etc/vector/vector.yaml"]
+          ports:
+            - name: api
+              containerPort: 8686
+          volumeMounts:
+            - name: config
+              mountPath: /etc/vector
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: vector-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vector-config
+  namespace: observability
+data:
+  vector.yaml: |
+    data_dir: /var/lib/vector
+    api:
+      enabled: true
+      address: 0.0.0.0:8686
+
+    sources:
+      demo:
+        type: demo_logs
+        format: json
+        interval: 1
+
+    sinks:
+      console:
+        type: console
+        inputs: [demo]
+        encoding:
+          codec: json
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vector
+  namespace: observability
+  labels:
+    monitoring: enabled
+spec:
+  selector:
+    app: vector
+  ports:
+    - name: api
+      port: 8686
+      targetPort: 8686

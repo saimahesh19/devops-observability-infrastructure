@@ -1,0 +1,540 @@
+# =============================================================================
+# Grafana Enterprise - Public Portfolio Showcase Values
+# =============================================================================
+#
+# Purpose:
+#   Sanitized Helm values demonstrating an enterprise-style Grafana deployment.
+#
+# IMPORTANT:
+#   - This file is a portfolio/showcase configuration, NOT a copy of production.
+#   - No real credentials, internal DNS names, customer data, certificates,
+#     private registry names, or organization-specific identifiers are included.
+#   - Secrets are referenced through Kubernetes Secrets and must be supplied
+#     separately in a real deployment.
+#
+# Architecture represented by this file:
+#   Grafana Enterprise
+#       |-- PostgreSQL backend
+#       |-- Redis-backed Unified Alerting HA
+#       |-- LDAP authentication
+#       |-- TLS
+#       |-- Persistent RWX storage
+#       |-- Image Renderer
+#       |-- HPA
+#       |-- Prometheus-compatible metrics
+#       |-- ARM64/Graviton scheduling
+#
+# Supporting components such as Redis, Vector, VictoriaMetrics, Memcached,
+# Memcached Exporter and Image Renderer can be documented/deployed separately.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Grafana administrator
+# -----------------------------------------------------------------------------
+admin:
+  adminUser: admin
+  existingSecret: grafana-admin-secret
+  passwordKey: GF_SECURITY_ADMIN_PASSWORD
+  userKey: ""
+
+assertNoLeakedSecrets: true
+
+# -----------------------------------------------------------------------------
+# Grafana image
+# -----------------------------------------------------------------------------
+image:
+  registry: registry.example.com
+  repository: grafana/grafana-enterprise
+  tag: "13.2.2"
+  pullPolicy: IfNotPresent
+  pullSecrets:
+    - name: registry-pull-secret
+
+# -----------------------------------------------------------------------------
+# High availability / scaling
+# -----------------------------------------------------------------------------
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  behavior: {}
+
+# -----------------------------------------------------------------------------
+# Grafana environment variables
+# -----------------------------------------------------------------------------
+env:
+  GF_DATABASE_HOST: postgres.example.internal:5432
+  GF_DATABASE_NAME: grafana_portfolio
+  GF_DATABASE_SSL_MODE: require
+  GF_DATABASE_TYPE: postgres
+  GF_DATABASE_USER: grafana_db_user
+  GF_INSTALL_PLUGINS: ""
+  GF_PLUGINS_PREINSTALL: ""
+  GF_RENDERING_RENDERER_TOKEN: grafana-renderer-token
+
+envValueFrom:
+  GF_DATABASE_PASSWORD:
+    secretKeyRef:
+      name: grafana-db-secret
+      key: GF_DATABASE_PASSWORD
+
+  GF_UNIFIED_ALERTING_HA_REDIS_PASSWORD:
+    secretKeyRef:
+      name: grafana-redis-secret
+      key: redis-password
+
+  LDAP_BIND_PASSWORD:
+    secretKeyRef:
+      name: grafana-ldap-secret
+      key: LDAP_BIND_PASSWORD
+
+# -----------------------------------------------------------------------------
+# Grafana configuration
+# -----------------------------------------------------------------------------
+grafana.ini:
+
+  # Legacy alerting disabled; Unified Alerting enabled below.
+  alerting:
+    enabled: false
+
+  analytics:
+    check_for_updates: true
+    reporting_enabled: false
+
+  # ---------------------------------------------------------------------------
+  # Authentication
+  # ---------------------------------------------------------------------------
+  auth.anonymous:
+    enabled: false
+    org_name: Example Organization
+    org_role: Viewer
+
+  auth.basic:
+    enabled: true
+    password_policy: false
+
+  auth.ldap:
+    enabled: true
+    active_sync_enabled: true
+    allow_sign_up: true
+    config_file: /etc/grafana/ldap.toml
+    skip_org_role_sync: false
+    sync_cron: "0 1 * * *"
+
+  # ---------------------------------------------------------------------------
+  # Database
+  # ---------------------------------------------------------------------------
+  database:
+    type: postgres
+    host: postgres.example.internal:5432
+    name: grafana_portfolio
+    user: grafana_db_user
+    ssl_mode: require
+
+  # ---------------------------------------------------------------------------
+  # Dashboards
+  # ---------------------------------------------------------------------------
+  dashboards:
+    dashboard_performance_metrics: true
+    min_refresh_interval: 30s
+    panel_series_limit: 0
+    versions_to_keep: 30
+
+  dashboards.json:
+    enabled: true
+    path: /var/lib/grafana/dashboards
+
+  # ---------------------------------------------------------------------------
+  # Email / signup behaviour
+  # ---------------------------------------------------------------------------
+  emails:
+    welcome_email_on_sign_up: false
+
+  users:
+    allow_org_create: false
+    allow_sign_up: false
+    auto_assign_org: true
+    auto_assign_org_id: 1
+    auto_assign_org_role: Viewer
+    default_language: en-US
+    default_theme: dark
+    verify_email_enabled: false
+
+  # ---------------------------------------------------------------------------
+  # Metrics
+  # ---------------------------------------------------------------------------
+  metrics:
+    enabled: true
+    interval_seconds: 10
+    classic_http_histogram_enabled: false
+    disable_total_stats: false
+
+  # ---------------------------------------------------------------------------
+  # Logging
+  # ---------------------------------------------------------------------------
+  log:
+    mode: console
+    level: info
+    format: json
+    filters: ldap:info,rendering:info
+
+  log.console:
+    level: info
+    format: json
+
+  # ---------------------------------------------------------------------------
+  # Remote cache
+  # ---------------------------------------------------------------------------
+  remote_cache:
+    type: memcached
+    connstr: memcached:11211
+
+  # ---------------------------------------------------------------------------
+  # Image rendering
+  # ---------------------------------------------------------------------------
+  rendering:
+    callback_url: https://grafana.example.com
+    renderer_token: grafana-renderer-token
+    server_url: http://grafana-image-renderer:8081/render
+
+  reporting:
+    enabled: true
+    concurrent_render_limit: 4
+    image_scale_factor: 2
+    max_attachment_size_mb: 10
+    rendering_timeout: 60s
+
+  # ---------------------------------------------------------------------------
+  # Security
+  # ---------------------------------------------------------------------------
+  security:
+    admin_email: platform-admins@example.com
+    admin_user: platformadmin
+    allow_embedding: false
+    cookie_samesite: lax
+    cookie_secure: true
+    disable_brute_force_login_protection: false
+    disable_gravatar: false
+    strict_transport_security: true
+    strict_transport_security_max_age_seconds: 86400
+    strict_transport_security_preload: false
+    strict_transport_security_subdomains: false
+
+  # ---------------------------------------------------------------------------
+  # HTTPS server
+  # ---------------------------------------------------------------------------
+  server:
+    protocol: https
+    http_addr: 0.0.0.0
+    http_port: 3000
+    domain: grafana.example.com
+    enforce_domain: false
+    enable_gzip: true
+    min_tls_version: TLS1.2
+    cert_file: /etc/grafana/ssl/tls.crt
+    cert_key: /etc/grafana/ssl/tls.key
+    root_url: '%(protocol)s://%(domain)s/'
+    serve_from_sub_path: false
+
+  # ---------------------------------------------------------------------------
+  # Unified Alerting HA
+  # ---------------------------------------------------------------------------
+  unified_alerting:
+    enabled: true
+    ha_advertise_address: ${POD_IP}:9094
+    ha_listen_address: ${POD_IP}:9094
+    ha_redis_address: redis:6379
+    ha_redis_db: 0
+
+  # ---------------------------------------------------------------------------
+  # Plugins
+  # ---------------------------------------------------------------------------
+  plugins:
+    allow_loading_unsigned_plugins: example-custom-datasource
+    enable_alpha: false
+    plugin_admin_enabled: true
+
+  # ---------------------------------------------------------------------------
+  # Query history / recorded queries
+  # ---------------------------------------------------------------------------
+  query_history:
+    enabled: true
+
+  recorded_queries:
+    enabled: true
+    max_queries: 500
+    min_interval: 10s
+
+# -----------------------------------------------------------------------------
+# LDAP configuration
+# -----------------------------------------------------------------------------
+# The real environment-specific LDAP configuration has intentionally been
+# replaced with generic example values.
+ldap:
+  enabled: true
+  existingSecret: ""
+  config: |-
+    verbose_logging = false
+
+    [[servers]]
+    host = "ldap.example.com"
+    port = 636
+    use_ssl = true
+    start_tls = false
+    ssl_skip_verify = false
+    timeout = 10
+    root_ca_cert = "/etc/grafana/ssl/ca.crt"
+    bind_dn = "cn=grafana-bind,ou=service,dc=example,dc=com"
+    bind_password = "${LDAP_BIND_PASSWORD}"
+    search_filter = "(account_name=%s)"
+    search_base_dns = ["DC=example,DC=com"]
+    group_search_base_dns = ["ou=groups,dc=example,dc=com"]
+
+    [servers.attributes]
+    name = "givenName"
+    surname = "sn"
+    username = "account_name"
+    member_of = "memberOf"
+    email = "mail"
+
+    [[servers.group_mappings]]
+    group_dn = "cn=app-admins,ou=groups,dc=example,dc=com"
+    org_role = "Admin"
+    grafana_admin = true
+
+    [[servers.group_mappings]]
+    group_dn = "cn=app-editors,ou=groups,dc=example,dc=com"
+    org_role = "Editor"
+    grafana_admin = false
+
+    [[servers.group_mappings]]
+    group_dn = "cn=app-viewers,ou=groups,dc=example,dc=com"
+    org_role = "Viewer"
+    grafana_admin = false
+
+# -----------------------------------------------------------------------------
+# TLS / certificate mounts
+# -----------------------------------------------------------------------------
+extraSecretMounts:
+  - name: grafana-tls
+    mountPath: /etc/grafana/ssl/tls.crt
+    secretName: grafana-tls-secret
+    subPath: tls.crt
+    readOnly: true
+
+  - name: grafana-tls-key
+    mountPath: /etc/grafana/ssl/tls.key
+    secretName: grafana-tls-secret
+    subPath: tls.key
+    readOnly: true
+
+  - name: grafana-ca
+    mountPath: /etc/grafana/ssl/ca.crt
+    secretName: grafana-ldap-ca-secret
+    subPath: ca.crt
+    readOnly: true
+
+# -----------------------------------------------------------------------------
+# Persistence
+# -----------------------------------------------------------------------------
+persistence:
+  enabled: true
+  type: pvc
+  existingClaim: grafana-pvc
+  accessModes:
+    - ReadWriteMany
+  size: 10Gi
+  disableWarning: false
+
+# -----------------------------------------------------------------------------
+# Resources
+# -----------------------------------------------------------------------------
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2
+    memory: 4Gi
+
+# -----------------------------------------------------------------------------
+# Kubernetes scheduling
+# -----------------------------------------------------------------------------
+nodeSelector:
+  kubernetes.io/arch: arm64
+  workload: graviton
+
+tolerations:
+  - key: graviton
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+
+# -----------------------------------------------------------------------------
+# Security context
+# -----------------------------------------------------------------------------
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 472
+  runAsGroup: 472
+  fsGroup: 472
+  fsGroupChangePolicy: Always
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  privileged: false
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+# -----------------------------------------------------------------------------
+# Probes
+# -----------------------------------------------------------------------------
+livenessProbe:
+  httpGet:
+    path: /api/health
+    port: 3000
+    scheme: HTTPS
+  initialDelaySeconds: 60
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 5
+
+readinessProbe:
+  httpGet:
+    path: /api/health
+    port: 3000
+    scheme: HTTPS
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 6
+
+startupProbe:
+  httpGet:
+    path: /api/health
+    port: 3000
+    scheme: HTTPS
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 30
+
+# -----------------------------------------------------------------------------
+# Service
+# -----------------------------------------------------------------------------
+service:
+  enabled: true
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+  portName: service
+
+# -----------------------------------------------------------------------------
+# Service account / RBAC
+# -----------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  automountServiceAccountToken: false
+
+rbac:
+  create: true
+  namespaced: false
+  pspEnabled: false
+
+# -----------------------------------------------------------------------------
+# Metrics / monitoring integration
+# -----------------------------------------------------------------------------
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  path: /metrics
+  scheme: http
+
+metrics:
+  enabled: true
+
+# -----------------------------------------------------------------------------
+# Image renderer
+# -----------------------------------------------------------------------------
+imageRenderer:
+  enabled: true
+  replicas: 1
+  grafanaProtocol: https
+  serverURL: http://grafana-image-renderer:8081/render
+  renderingCallbackURL: https://grafana.example.com
+
+  image:
+    registry: docker.io
+    repository: grafana/grafana-image-renderer
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    enabled: true
+    port: 8081
+    targetPort: 8081
+    portName: http
+
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+
+# -----------------------------------------------------------------------------
+# Grafana service ingress
+# -----------------------------------------------------------------------------
+# Disabled by default in the public showcase values. A separate example
+# ingress can demonstrate TLS and DNS without embedding real infrastructure.
+ingress:
+  enabled: false
+  hosts:
+    - grafana.example.com
+  path: /
+  pathType: Prefix
+  tls: []
+
+# -----------------------------------------------------------------------------
+# Deployment strategy
+# -----------------------------------------------------------------------------
+deploymentStrategy:
+  type: RollingUpdate
+
+# -----------------------------------------------------------------------------
+# Pod disruption / availability
+# -----------------------------------------------------------------------------
+podDisruptionBudget: {}
+
+# -----------------------------------------------------------------------------
+# Optional Helm sidecars
+# -----------------------------------------------------------------------------
+sidecar:
+  dashboards:
+    enabled: false
+  datasources:
+    enabled: false
+  alerts:
+    enabled: false
+  notifiers:
+    enabled: false
+  plugins:
+    enabled: false
+
+# -----------------------------------------------------------------------------
+# Disabled/defaulted optional features
+# -----------------------------------------------------------------------------
+testFramework:
+  enabled: true
+
+initChownData:
+  enabled: false
+
+# =============================================================================
+# End of sanitized public showcase values
+# =============================================================================

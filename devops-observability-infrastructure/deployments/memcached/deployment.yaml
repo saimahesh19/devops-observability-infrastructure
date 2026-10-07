@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memcached
+  namespace: observability
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: memcached
+  template:
+    metadata:
+      labels:
+        app: memcached
+        monitoring: enabled
+    spec:
+      containers:
+        - name: memcached
+          image: memcached:1.6
+          args:
+            - --memory-limit=256
+            - --conn-limit=1024
+          ports:
+            - name: memcached
+              containerPort: 11211
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 384Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: memcached
+  namespace: observability
+spec:
+  selector:
+    app: memcached
+  ports:
+    - name: memcached
+      port: 11211
+      targetPort: 11211
